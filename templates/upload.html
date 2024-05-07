@@ -1,0 +1,210 @@
+{% extends "layout.html" %}
+
+{% block title %}
+Upload Image
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-6 bg-light">
+            <h2>Upload Image</h2>
+            <div id="dropArea" class="border-dashed border-2 border-gray-600 py-5 text-center mb-4" style="cursor: pointer;">
+                Drag and drop files here or click to select files
+            </div>
+            <!-- <div id="fileList" class="mb-3"></div> Display selected file names and preview -->
+            <div class="progress" id="uploadProgress" style="height: 25px; display: none;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%;" id="uploadProgressBar"></div>
+            </div>
+            <form id="uploadForm" class="mt-4">
+                <input type="file" class="form-control-file d-none" id="file" name="file" multiple required>
+                <button type="submit" class="btn btn-primary mt-3 d-none" id="submitBtn">Upload</button>
+            </form>
+        </div>
+        <div class="col-md-6 bg bg-light">
+            <div class="row justify-content-center mb-3" id="fileList"></div>
+        </div>
+    </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@azure/storage-blob"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const dropArea = document.getElementById("dropArea");
+    const fileInput = document.getElementById("file");
+    const uploadForm = document.getElementById("uploadForm");
+    const submitBtn = document.getElementById("submitBtn");
+    const fileList = document.getElementById("fileList");
+
+    const preventDefaults = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+    };
+
+    ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+        dropArea.addEventListener(eventName, preventDefaults, false);
+    });
+
+    const highlight = () => dropArea.classList.add("highlight");
+    const unhighlight = () => dropArea.classList.remove("highlight");
+
+    ["dragenter", "dragover"].forEach((eventName) => {
+        dropArea.addEventListener(eventName, highlight, false);
+    });
+
+    ["dragleave", "drop"].forEach((eventName) => {
+        dropArea.addEventListener(eventName, unhighlight, false);
+    });
+
+    const validateFiles = (files) => {
+        const allowedFileTypes = ["image/jpeg", "image/png", "image/gif"];
+        for (let i = 0; i < files.length; i++) {
+            if (!allowedFileTypes.includes(files[i].type)) {
+                alert("Only image files are allowed!");
+                return false;
+            }
+        }
+        return true;
+    };
+
+    const updateFileList = (files) => {
+        fileList.innerHTML = ""; // Clear current file list
+        if (files.length > 0) {
+            const list = document.createElement("ul");
+            for (let i = 0; i < files.length; i++) {
+                const li = document.createElement("li");
+                list.appendChild(li);
+                if (["image/jpeg", "image/png", "image/gif"].includes(files[i].type)) {
+                    const imgContainer = document.createElement("div");
+                    imgContainer.style.textAlign = "center";
+                    
+                    const img = document.createElement("img");
+                    img.src = URL.createObjectURL(files[i]);
+                    img.style.maxHeight = "300px";
+                    imgContainer.appendChild(img); // Preview the image
+                    
+                    const fileName = document.createElement("p");
+                    fileName.textContent = files[i].name;
+                    imgContainer.appendChild(fileName); // Display the file name
+                    
+                    li.appendChild(imgContainer);
+                }
+            }
+            fileList.appendChild(list);
+        } else {
+            fileList.textContent = "No files selected.";
+        }
+    };
+
+    dropArea.addEventListener("drop", (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+
+        if (validateFiles(files)) {
+            fileInput.files = files;
+            updateFileList(files);
+            submitBtn.classList.remove("d-none"); // Show the upload button
+        }
+    });
+
+    dropArea.addEventListener("click", () => fileInput.click());
+
+    fileInput.addEventListener("change", function () {
+        if (validateFiles(this.files)) {
+            updateFileList(this.files);
+            submitBtn.classList.remove("d-none");
+        }
+    });
+
+    const { BlobServiceClient } = require("@azure/storage-blob");
+    
+    // Function to get SAS token and container information from the backend
+    async function getSasTokenAndContainer() {
+        const response = await fetch("/api/getcontainersas", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to get SAS token and container information");
+        }
+
+        const data = await response.json();
+        console.log("SAS Token:", data.sas_token);
+        console.log("Container Name:", data.container_name);
+        console.log("Blob Endpoint:", data.blob_endpoint);
+        console.log("Expiry:", data.expiry);
+
+        return data;  // Return the whole data object for ease of use
+    }
+
+// Function to upload a file to Azure Blob Storage
+async function uploadFileToBlob(file, data) {
+    const { BlobServiceClient } = require("@azure/storage-blob");
+
+    // Construct the container URL with the SAS token
+    const containerUrl = `${data.blob_endpoint}/${data.container_name}?${data.sas_token}`;
+
+    const containerClient = new BlobServiceClient(containerUrl, null).getContainerClient();
+    const blockBlobClient = containerClient.getBlockBlobClient(data.blob_name);
+
+    // Upload the file with progress tracking
+    await blockBlobClient.uploadBrowserData(file, {
+        contentType: data.content_type,  // Set the expected content type
+        onProgress: (progress) => {
+            const percentage = (progress.loadedBytes / file.size) * 100;
+            console.log(`Upload progress: ${percentage.toFixed(2)}%`);
+        },
+    });
+
+    alert("File uploaded successfully!");
+}
+
+    // Event listener for form submission
+    uploadForm.addEventListener("submit", async function (e) {
+        e.preventDefault();  // Prevent default form submission
+        const fileInput = document.getElementById("file");
+        const files = fileInput.files;
+
+        if (!files.length) {
+            alert("No file selected");
+            return;
+        }
+
+        try {
+            const data = await getSasTokenAndContainer();  // Fetch the SAS token and related data
+            for (const file of files) {
+                await uploadFileToBlob(file, data);  // Upload with the fetched data
+            }
+        } catch (err) {
+            console.error("Error during upload:", err);
+            alert("Failed to upload the file");
+        }
+    });
+});
+</script>
+<!-- <script type="module" src="../js/main.js"></script>
+<script type="module" src="../js/azureStorage.js"></script> -->
+<style>
+    #dropArea {
+        border: 2px dashed #ccc;
+        padding: 20px;
+        transition: background-color 0.3s;
+    }
+    #dropArea.highlight {
+        background-color: #f0f0f0;
+    }
+    #fileList ul {
+        list-style-type: none;
+        padding: 0;
+    }
+    #fileList ul li {
+        margin-bottom: 10px;
+        font-size: 16px;
+    }
+</style>
+
+{% endblock %}

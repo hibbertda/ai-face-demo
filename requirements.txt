@@ -1,0 +1,5 @@
+azure-cognitiveservices-vision-face
+azure-storage-blob
+python-dotenv
+Pillow
+flask

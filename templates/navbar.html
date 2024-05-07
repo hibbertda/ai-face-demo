@@ -1,0 +1,31 @@
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <a class="navbar-brand p-2" href="#">Dan's DEMO</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav">
+            <li class="nav-item">
+                <a class="nav-link" href="/">Home</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link" href="{{ url_for('eval') }}">Evaluate</a>
+            </li>
+            <li>
+                <a class="nav-link" href="{{ url_for('upload') }}">Upload</a>
+            </li>
+        </ul>
+    </div>
+</nav>
+
+<script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+        let navItems = document.querySelectorAll('.nav-link');
+        let currentURL = window.location.href;
+        navItems.forEach((navItem) => {
+            if (navItem.href === currentURL) {
+                navItem.parentElement.classList.add('active');
+            }
+        });
+    });
+</script>
